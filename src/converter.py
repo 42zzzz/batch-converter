@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 
 from markitdown import MarkItDown
+from src.ocr_handler import OcrHandler
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,10 @@ class ConversionError(Exception):
 
 
 class Converter:
-    def __init__(self):
+    def __init__(self, enable_ocr=True, ocr_language="eng", tesseract_cmd=None):
         self._engine = MarkItDown()
+        self.enable_ocr = enable_ocr
+        self.ocr_handler = OcrHandler(language=ocr_language, tesseract_cmd=tesseract_cmd)
 
     def validate_file(self, path):
         path = Path(path)
@@ -58,7 +61,16 @@ class Converter:
             try:
                 logger.info(f"Converting [{attempt}/{retries}]: {file_path.name}")
                 result = self._engine.convert(str(file_path))
-                output_path.write_text(result.text_content, encoding="utf-8")
+                text_content = result.text_content
+
+                if self.enable_ocr:
+                    logger.info(f"Running OCR on embedded/source images for {file_path.name}...")
+                    ocr_text = self.ocr_handler.extract_text_from_file(file_path)
+                    if ocr_text:
+                        text_content += "\n\n" + ocr_text
+                        logger.info(f"Successfully extracted OCR text for {file_path.name}")
+
+                output_path.write_text(text_content, encoding="utf-8")
                 logger.info(f"Wrote: {output_path}")
                 return str(output_path)
             except Exception as e:
